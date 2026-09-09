@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuTswbZrnuoCdchV2HbTQYyAddz+1gMPebIY4i5SmX2makbadZEo2PNeTY5i0xQOKRHqV0FARHlPD431RJh8uhSXMQTAQ8Wq4T7+WMBYMFhfp1Zuo8kSphUu3440xp/1WrVf7HD368g1wmrMi1GH2m33KrZRYSpz4irFdZCIRHaOmemvS/Ii1hqJg1fK5O5PfCFvin2URAt3rcJXHCjDL/3hOuLqvcQ2E0KW0qs0SyVbk5+3pPO+xqbm8GRKSQONaogFqcGjY4ZZGDOuIYNLBqekcueIttkk5WSQsYmovdlH0lxzkrWxCxP2SJXpn4UVD9aohFI7gcaokFF6FL2u8MwIDAQAB",
   "name": "ClipForge — Video to Clips",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Send your YouTube videos or page video URLs to your local ClipForge editor. Transcribe, reframe, caption and export clips.",
   "permissions": ["activeTab", "scripting", "contextMenus", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:43177/*"],

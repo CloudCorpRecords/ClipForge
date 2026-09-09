@@ -17,13 +17,15 @@ EXTENSION_ORIGIN='chrome-extension://hllhhgmemaeimjjecboegbfgbkbehokk'
 ALLOWED_ORIGINS={'http://127.0.0.1:43177','http://localhost:43177',EXTENSION_ORIGIN}
 
 BRAND=dict(font='Arial',color='#FFFFFF',highlight='#C8ED48',style='pop')
-LINKS=dict(site='https://example.com',course='https://example.com/course')
+LINKS=dict(site='',course='')
+PROFILE={}
 FONTS=('Arial','Helvetica','Impact','Georgia','Avenir Next','Menlo')
 def ai_settings_path(): return DATA/'settings.json'
 def brand_public(): return dict(font=BRAND['font'],color=BRAND['color'],highlight=BRAND['highlight'],style=BRAND['style'])
 def links_public(): return dict(site=LINKS['site'],course=LINKS['course'])
 def url_ok(value,fallback):
     text=str(value or '').strip()
+    if not text: return ''
     return text if re.fullmatch(r'https?://[^\s]{3,180}',text) else fallback
 def apply_links(body):
     if body.get('site') is not None: LINKS['site']=url_ok(body['site'],LINKS['site'])
@@ -52,9 +54,10 @@ def load_ai():
     if raw.get('model'): ai.MODEL=str(raw['model'])
     if raw.get('stt_model'): ai.STT=str(raw['stt_model'])
     apply_brand(raw.get('brand') or raw); apply_links(raw.get('links') or raw)
+    PROFILE.update(raw.get('profile') or {})
 def save_ai():
     path=ai_settings_path(); temp=path.with_suffix('.tmp')
-    temp.write_text(json.dumps(dict(key=ai.KEY,model=ai.MODEL,stt_model=ai.STT,brand=brand_public(),links=links_public()),indent=2)); temp.replace(path)
+    temp.write_text(json.dumps(dict(key=ai.KEY,model=ai.MODEL,stt_model=ai.STT,brand=brand_public(),links=links_public(),profile=dict(PROFILE)),indent=2)); temp.replace(path)
 load_ai()
 
 @app.middleware('http')
@@ -129,7 +132,17 @@ def validate_url(url):
     return url
 
 class ImportRequest(BaseModel): url:str=Field(max_length=4096)
+class CreatorProfile(BaseModel):
+    name:str=Field(default='',max_length=120)
+    about:str=Field(default='',max_length=2000)
+    audience:str=Field(default='',max_length=500)
+    tone:str=Field(default='',max_length=300)
+    offer:str=Field(default='',max_length=1000)
+    cta:str=Field(default='',max_length=160)
+    avoid:str=Field(default='',max_length=1000)
+
 class Settings(BaseModel):
+    profile:CreatorProfile|None=None
     key:str|None=Field(default=None,max_length=512)
     model:str=Field(default='google/gemini-2.5-flash',max_length=120)
     stt_model:str=Field(default='openai/whisper-1',max_length=120)
@@ -221,13 +234,15 @@ def finish_import(p,path,progress):
     if path!=final: path.unlink(missing_ok=True)
 
 @app.get('/api/health')
-def health(): return dict(ok=True,key_set=bool(ai.KEY),model=ai.MODEL,stt_model=ai.STT,ffmpeg=Path(media.FFMPEG).name,ghl=ghl.public(ghl.load(DATA)),brand=brand_public(),links=links_public())
+def health(): return dict(ok=True,key_set=bool(ai.KEY),model=ai.MODEL,stt_model=ai.STT,ffmpeg=Path(media.FFMPEG).name,ghl=ghl.public(ghl.load(DATA)),brand=brand_public(),links=links_public(),profile=dict(PROFILE))
 @app.post('/api/settings')
 def settings(body:Settings):
     if body.key is not None: ai.KEY=body.key.strip()
     ai.MODEL=body.model; ai.STT=body.stt_model
     apply_brand(dict(font=body.caption_font,color=body.caption_color,highlight=body.caption_highlight,style=body.caption_style))
     apply_links(dict(site=body.site_url,course=body.course_url))
+    if body.profile is not None:
+        PROFILE.clear(); PROFILE.update(body.profile.model_dump())
     save_ai()
     ghl_body={}
     if body.ghl_token is not None: ghl_body['token']=body.ghl_token
@@ -235,7 +250,7 @@ def settings(body:Settings):
     if body.ghl_user is not None: ghl_body['user']=body.ghl_user
     if body.ghl_accounts is not None: ghl_body['accounts']=body.ghl_accounts
     saved=ghl.save(DATA,ghl_body) if ghl_body else ghl.public(ghl.load(DATA))
-    return dict(key_set=bool(ai.KEY),ghl=saved,brand=brand_public(),links=links_public())
+    return dict(key_set=bool(ai.KEY),ghl=saved,brand=brand_public(),links=links_public(),profile=dict(PROFILE))
 @app.get('/api/ghl/accounts')
 def ghl_accounts(): return ghl.accounts(ghl.require(DATA))
 @app.get('/api/ghl/users')
@@ -336,7 +351,7 @@ def analyze(pid:str,body:Analyze):
                 export_one(p,c,lambda m,f:progress(f'Clip {i+1}/{len(fresh)} · {m}',f))
         for i,c in enumerate(fresh):
             progress(f'Writing social posts · {i+1}/{len(fresh)}',.92)
-            c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS); write(p)
+            c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); write(p)
     return queue(pid,'analyze',work)
 
 @app.post('/api/projects/{pid}/clips')
@@ -398,14 +413,14 @@ def save_one(pid:str,cid:str):
     return queue(pid,'save',lambda progress:save_clip_media(p,c,progress))
 def clip_social(p,c):
     social=c.get('social')
-    if not social or not social.get('posts'):
-        social=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS); c['social']=social; write(p)
+    if not social or not social.get('posts') or social.get('_context') != ai.social_context(LINKS,PROFILE):
+        social=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); c['social']=social; write(p)
     return social
 @app.post('/api/projects/{pid}/clips/{cid}/copy')
 def write_copy(pid:str,cid:str):
     p=require_ready(pid); c=next((x for x in p['clips'] if x['id']==cid),None)
     if c is None: raise HTTPException(404)
-    c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS); write(p)
+    c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); write(p)
     return c['social']
 @app.get('/api/projects/{pid}/bundle')
 def bundle(pid:str):

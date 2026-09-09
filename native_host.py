@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PYTHON = ROOT / ".venv" / "bin" / "python"
+PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 LOG = ROOT / "data" / "engine.log"
 HOST = "127.0.0.1"
 PORT = 43177
@@ -38,7 +38,8 @@ def start_engine():
         raise RuntimeError("ClipForge is missing its Python environment. Run Install ClipForge again.")
     LOG.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env["PATH"] = "/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:" + env.get("PATH", "")
+    if os.name != 'nt':
+        env["PATH"] = "/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:" + env.get("PATH", "")
     with LOG.open("ab", buffering=0) as output:
         ENGINE_PROCESS = subprocess.Popen(
             [str(PYTHON), "-m", "uvicorn", "server.app:app", "--host", HOST, "--port", str(PORT)],
@@ -47,7 +48,7 @@ def start_engine():
             stdin=subprocess.DEVNULL,
             stdout=output,
             stderr=subprocess.STDOUT,
-            start_new_session=True,
+            **({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}),
         )
     deadline = time.monotonic() + 25
     while time.monotonic() < deadline:
@@ -78,6 +79,10 @@ def write_message(message):
 
 
 def main():
+    if os.name == 'nt':
+        import msvcrt
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
     try:
         while True:
             message = read_message()

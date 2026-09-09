@@ -1,31 +1,16 @@
-CLIPFORGE — START HERE (macOS)
+WELCOME TO CLIPFORGE — WINDOWS AND MAC
 
-Welcome to ClipForge, a Chrome video clipping studio.
+Read README.md and SETUP.md for the complete beginner walkthrough.
 
-This package is for Mac + Google Chrome. It includes the source code and a
-one-time installer for the local video engine. A Windows installer is not included.
+1. Install Chrome, Python 3.11–3.13 (64-bit), and Node.js 22+.
+2. Extract the entire ZIP into a permanent folder.
+3. Windows: double-click Install ClipForge.cmd.
+   Mac: double-click Install ClipForge.command.
+4. In Chrome open chrome://extensions, turn on Developer mode,
+   click Load unpacked, and select the extension folder.
+5. Open ClipForge > AI & settings and fill out your own creator profile.
+6. Upload a video, generate clips, review and export.
 
-1. Install Python 3.11 or newer from https://www.python.org/downloads/macos/
-   and Node.js 22 LTS or newer from https://nodejs.org/ (needed for YouTube imports).
-2. Extract the ZIP and keep the ClipForge folder somewhere permanent.
-3. Double-click Install ClipForge.command. The first install downloads dependencies.
-4. In Chrome open chrome://extensions, enable Developer mode, click Load unpacked,
-   and select the extension folder inside ClipForge. Pin ClipForge to the toolbar.
-5. Click ClipForge, upload your original video or import a supported video URL.
-6. Pick clip length/count and Generate clips. Review, edit and export MP4s.
-
-Recorded hour-long streams are within the 4-hour / 8-GB input limits. Live streams
-must finish first. Long videos take time and disk space to process.
-
-Local Whisper works without an API key (the model downloads on first use).
-For cloud AI, enter your OWN funded OpenRouter API key in Settings. GoHighLevel
-is optional and requires your own account and integration token.
-
-Chrome automatically starts the local engine after setup; you don't need to keep
-a terminal window open. Local rendering still requires this companion on your Mac.
-
-Face framing is basic face detection; review crops and captions before sharing.
-No promise of viral results. Protected or login-only video URLs may fail; upload
-the original file instead. Use videos you own or have permission to edit.
-
-No API keys, account connections, personal videos, or projects are included.
+Want social posting? Visit https://aspirebuilderpro.com and see the
+step-by-step social connection section in SETUP.md. A paid workspace
+is optional; it is not needed to edit or export videos.

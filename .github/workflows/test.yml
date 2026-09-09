@@ -1,0 +1,30 @@
+name: Test ClipForge
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Windows setup
+        if: runner.os == 'Windows'
+        run: python tools/setup_windows.py
+      - name: Mac setup
+        if: runner.os == 'macOS'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+      - name: Windows tests including native protocol and MP4 rendering
+        if: runner.os == 'Windows'
+        run: .venv/Scripts/python.exe -m pytest -q
+      - name: Mac tests including native protocol and MP4 rendering
+        if: runner.os == 'macOS'
+        run: .venv/bin/python -m pytest -q

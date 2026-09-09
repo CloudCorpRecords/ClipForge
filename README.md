@@ -1,45 +1,55 @@
 # ClipForge
 
-ClipForge is a Chrome extension with a private local video engine. Chrome owns the visible studio; the engine supplies FFmpeg, local Whisper transcription, URL importing, face-aware reframing, captions, and MP4 rendering.
+Turn recorded videos into short clips with transcripts, captions, reframing and MP4 exports. ClipForge runs as a Chrome extension with a companion engine on your computer.
 
-## Normal use
+**Start here:** [Download ZIP](https://github.com/MyAiTeam2/ClipForge/archive/refs/heads/main.zip) · [Beginner setup guide](SETUP.md)
 
-1. Click ClipForge in Chrome while viewing one of your YouTube videos, or open ClipForge and upload a file.
-2. Import the video.
-3. Choose Local Whisper or OpenRouter in **AI & settings**.
-4. Generate clips, review the suggested cuts, adjust framing and captions, then export.
+## Install on Windows or Mac
 
-The extension asks Chrome Native Messaging to start the engine automatically. No Terminal window or visible `127.0.0.1` page is needed. The engine listens only on this Mac, and the API accepts the fixed ClipForge extension origin plus its own local development origin.
+1. Install [Google Chrome](https://www.google.com/chrome/), **64-bit Python 3.11–3.13** from [python.org](https://www.python.org/downloads/), and **Node.js 22+** from [nodejs.org](https://nodejs.org/). Python 3.11 is used in automated tests.
+2. Download the ZIP above. **Extract all files** into a permanent folder. Do not run inside the ZIP.
+3. **Windows 10/11:** double-click `Install ClipForge.cmd`. **macOS:** double-click `Install ClipForge.command`. Keep the installer window open until it says setup is complete.
+4. In Chrome's address bar enter `chrome://extensions`. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension` folder inside the extracted project.
+5. Click Chrome's puzzle-piece icon, pin **ClipForge**, then click it. Chrome starts the engine automatically.
 
-## One-time installation
+On Windows, enable **Add python.exe to PATH** in the Python installer. If the Mac command is not executable, open Terminal in the extracted folder and run `bash "Install ClipForge.command"`. The first setup downloads dependencies and can take several minutes.
 
-**Supported: macOS + Google Chrome.** Install Python 3.11+ and Node.js 22+ first.
+## Make it yours
 
-Click **Code → Download ZIP** above and extract it to a permanent folder, or clone this repository. Read [START HERE.txt](START%20HERE.txt) for full setup details, then:
+Open **AI & settings → Tell ClipForge about you**. Save your name, business description, audience, voice, factual offers, call to action, topics to avoid, and optional website/resource URLs. There is no default business to promote.
 
-1. Double-click **Install ClipForge.command**.
-2. Open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
-3. Select the `extension` folder inside your extracted project folder.
+OpenRouter uses the full profile when writing social captions and comments. Without an OpenRouter key, simple local templates use your name, description, links and call to action. In a clip's scheduling window, **New options** generates fresh copy. Review it before posting.
 
-If the project folder moves, run **Install ClipForge.command** again so Chrome knows the companion's new absolute path.
+## Want to post directly to social?
 
-## Troubleshooting
+**Explore [Aspire Builder Pro](https://aspirebuilderpro.com)** for a business workspace with social planning. Create an account, confirm Social Planner and Private Integrations access with support, and follow the [social connection walkthrough](SETUP.md#social-posting-with-aspire-builder-pro).
 
-- Reload ClipForge on `chrome://extensions` after changing extension code.
-- Use **Start ClipForge.command** only as a manual recovery tool.
-- The engine log is `data/engine.log`.
-- Native startup diagnostics are in `~/Library/Application Support/ClipForge/native-host.log`. The installer registers a launcher that uses ClipForge's exact Python environment, so startup does not depend on Chrome's `PATH`.
-- Protected or authenticated streams may reject URL importing. Upload your original video file in that case.
-- OpenRouter is optional. Its key and GoHighLevel credentials are stored in the ignored local `data` directory, never in the extension source.
+Aspire is an optional paid service; account features and permissions depend on your plan. Already have a compatible HighLevel workspace? Connect it instead. You can edit and export videos without either account. ClipForge does not add Aspire ads to your generated posts.
 
-## Uninstalling
+## Your first clips
 
-Remove the extension in Chrome. Double-click **Uninstall ClipForge Companion.command** to move the automatic-start registration to Trash. Projects remain in `data` until you remove them yourself.
+Upload a video you own, or import a supported video URL. Choose clip length and count, then **Generate clips**. Local Whisper downloads its speech model on first use; OpenRouter is optional and uses your own funded API key. Review cuts, framing and captions, then export MP4s or schedule a post.
 
-## Requirements and limits
+Recorded streams up to 4 hours / 8 GB fit the input limits. Long videos need processing time and disk space. Protected, live or login-only URLs may fail; upload the original recording instead. Results need review and are not guarantees of views.
 
-The local companion is required for rendering; this is not a browser-only WebAssembly app. Chrome starts it automatically after installation. Internet access is needed for dependency/model downloads and URL imports. OpenRouter is optional and requires your own funded key. Local Whisper downloads its model on first use.
+## Updates and troubleshooting
 
-Recorded streams up to 4 hours / 8 GB fit the configured input limits; processing time depends on your Mac. Review generated captions and framing before publishing. Windows and Linux installers are not included.
+Close ClipForge tabs before replacing the source. Keep your local `data` folder when updating, rerun the installer, then click **Reload** on ClipForge at `chrome://extensions`. If you move the project folder, rerun the installer to update the companion path. Restart Chrome after installing Node so YouTube imports can find it.
 
-If macOS reports a command file is not executable, open Terminal in the extracted folder and run `bash "Install ClipForge.command"`.
+- Engine unavailable: rerun your platform's installer and reload the extension. Check `data/engine.log`.
+- Mac startup log: `~/Library/Application Support/ClipForge/native-host.log`.
+- Windows registration: `%LOCALAPPDATA%\ClipForge\com.clipforge.engine.json`. Use `Start ClipForge.cmd` to see startup errors in a console.
+- Windows Python missing: reinstall a supported Python version with PATH enabled. Do not use Python 3.14 for this dependency set.
+- Social connection denied: check the location ID, location-level token and all five required permissions in [SETUP.md](SETUP.md).
+
+## Privacy and architecture
+
+The local companion is required for FFmpeg rendering; this is not a browser-only app. It listens on loopback. Keys, profiles, videos and projects are stored in the local `data` folder, which is excluded from Git. Cloud transcription sends audio to OpenRouter; cloud copy sends transcript excerpts and your creator profile. Social uploads send the selected media to your connected workspace. Keep API tokens private.
+
+## Uninstall
+
+Remove ClipForge in Chrome. Run `Uninstall ClipForge Companion.cmd` on Windows or `Uninstall ClipForge Companion.command` on Mac. These remove the Chrome registration and keep your project files. Delete your project folder separately only if you no longer need the saved videos and settings.
+
+## Development and verification
+
+The GitHub Actions workflow runs the installer dependencies, native messaging protocol test, creator-profile tests and a real captioned vertical MP4 render on Windows and macOS. It does not automate the Chrome UI or live social publishing. Run `.venv/Scripts/python.exe -m pytest -q` on Windows or `.venv/bin/python -m pytest -q` on Mac after setup.
