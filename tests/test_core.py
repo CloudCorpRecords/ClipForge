@@ -51,4 +51,4 @@ def test_local_social_has_options_and_links():
     out=local_social('Hook','sell more cards','https://example.com','https://example.com/course')
     assert len(out['posts'])==3 and len(out['comments'])==3
     blob=' '.join(x['text'] for x in out['posts']+out['comments'])
-    assert 'cardpriceking.com' in blob and 'bulk-selling' in blob
+    assert 'https://example.com' in blob and 'https://example.com/course' in blob

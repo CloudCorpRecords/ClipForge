@@ -38,7 +38,7 @@ function fillBrand(info,links){
  if($('#set-color'))$('#set-color').value=brand.color;if($('#gen-color'))$('#gen-color').value=brand.color;
  if($('#set-highlight'))$('#set-highlight').value=brand.highlight;if($('#gen-highlight'))$('#gen-highlight').value=brand.highlight;
  if($('#brand-saved'))$('#brand-saved').textContent=`Saved · ${brand.font} · ${brand.style} · ${brand.color} / ${brand.highlight}`;
- if(links){if($('#set-site'))$('#set-site').value=links.site||'https://cardpriceking.com';if($('#set-course'))$('#set-course').value=links.course||'https://cardpriceking.com/course/bulk-selling'}
+ if(links){if($('#set-site'))$('#set-site').value=links.site||'https://example.com';if($('#set-course'))$('#set-course').value=links.course||'https://example.com/course'}
  document.documentElement.style.setProperty('--cap',brand.color);document.documentElement.style.setProperty('--hi',brand.highlight);
 }
 function brandFields(prefix){return {caption_style:$(prefix==='edit'?'#caption-style':'#'+prefix+'-caption-style')?.value||brand.style,caption_font:$(prefix==='edit'?'#edit-font':'#'+prefix+'-font')?.value||brand.font,caption_color:($(prefix==='edit'?'#edit-color':'#'+prefix+'-color')?.value||brand.color).toUpperCase(),caption_highlight:($(prefix==='edit'?'#edit-highlight':'#'+prefix+'-highlight')?.value||brand.highlight).toUpperCase()}}
