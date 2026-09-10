@@ -1,0 +1,8 @@
+{
+  "model": "myaiteam2/clipforge-engine",
+  "version": "a41dc6b32e7101aaa04e8a7dd937fee7501cfea76f9eed823d94527139fb5405",
+  "deployment": "myaiteam2/clipforge-engine",
+  "hardware": "cpu",
+  "min_instances": 0,
+  "max_instances": 1
+}

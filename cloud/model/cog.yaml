@@ -1,0 +1,22 @@
+build:
+  gpu: false
+  python_version: '3.11'
+  system_packages:
+    - ffmpeg
+    - libgl1
+    - libglib2.0-0
+    - fonts-dejavu-core
+    - curl
+    - xz-utils
+  python_packages:
+    - yt-dlp[default]==2026.8.19
+    - faster-whisper==1.1.0
+    - opencv-python-headless==4.11.0.86
+    - imageio-ffmpeg==0.6.0
+    - httpx==0.28.1
+    - numpy==2.2.6
+  run:
+    - curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz | tar -xJ -C /opt
+    - ln -s /opt/node-v22.14.0-linux-x64/bin/node /usr/local/bin/node
+    - python -c "from huggingface_hub import snapshot_download; snapshot_download('Systran/faster-whisper-base', local_dir='/opt/whisper-base')"
+predict: 'predict.py:Predictor'

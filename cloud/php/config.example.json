@@ -1,0 +1,6 @@
+{
+  "replicate_token": "YOUR_REPLICATE_API_TOKEN",
+  "deployment": "YOUR_USERNAME/clipforge-engine",
+  "password": "GENERATE_A_PHP_PASSWORD_HASH",
+  "openrouter_key": ""
+}

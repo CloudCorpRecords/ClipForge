@@ -4,6 +4,10 @@ Turn recorded videos into short clips with transcripts, captions, reframing and 
 
 **Start here:** [Download ZIP](https://github.com/MyAiTeam2/ClipForge/archive/refs/heads/main.zip) · [Beginner setup guide](SETUP.md)
 
+## Website edition
+
+[ClipForge Cloud](cloud/README.md) is the PHP website and Replicate CPU worker. It includes video imports, timestamped transcription, project folders and captioned clip exports. The Chrome edition below runs its editing engine on your computer.
+
 ## Install on Windows or Mac
 
 1. Install [Google Chrome](https://www.google.com/chrome/), **64-bit Python 3.11–3.13** from [python.org](https://www.python.org/downloads/), and **Node.js 22+** from [nodejs.org](https://nodejs.org/). Python 3.11 is used in automated tests.
