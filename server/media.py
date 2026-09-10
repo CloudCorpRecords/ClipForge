@@ -175,7 +175,7 @@ def render(source,meta,clip,words,folder,progress):
            '-vf','fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2','-c:v','libx264','-preset','veryfast','-crf','18',
            '-pix_fmt','yuv420p','-c:a','aac','-ar','48000',part)
         pieces.append(part)
-    listing=folder/'concat.txt'; listing.write_text('\n'.join(f"file '{p.name}'" for p in pieces))
+    listing=folder/'concat.txt'; listing.write_text('\n'.join(f"file '{p.name}'" for p in pieces), encoding='utf-8')
     cut=folder/'cut.mp4'; ff('-f','concat','-safe','1','-i',listing,'-c','copy',cut)
     width,height={'vertical':(1080,1920),'square':(1080,1080),'landscape':(1920,1080)}[clip['aspect']]
     if clip.get('resolution')==720: width=width*2//3; height=height*2//3

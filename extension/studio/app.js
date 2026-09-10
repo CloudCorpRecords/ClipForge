@@ -58,12 +58,31 @@ async function loadAccounts(){if(!ghlInfo.connected){ghlAccounts=[];return []}co
 async function loadUsers(){if(!ghlInfo.connected){ghlUsers=[];return []}const data=await api('/ghl/users');ghlUsers=data.users||[];if(!ghlInfo.user&&ghlUsers[0])ghlInfo.user=ghlUsers[0].id;fillUserSelect('#ghl-user',ghlInfo.user);fillUserSelect('#schedule-user',ghlInfo.user);fillUserSelect('#quick-user',ghlInfo.user);return ghlUsers}
 function accountBoxes(id,selectedIds){const pick=new Set(selectedIds||ghlInfo.accounts||[]);$(id).innerHTML=ghlAccounts.length?ghlAccounts.map(a=>`<label><input type="checkbox" value="${esc(a.id)}" ${pick.has(a.id)?'checked':''}><span>${esc(a.name||a.platform||'Account')} · ${esc(a.platform||'')}</span></label>`).join(''):'<p class="tiny muted">No social accounts yet. Connect them in GHL Social Planner, then Test connection in Settings.</p>'}
 function checkedAccounts(id){return $$(`${id} input:checked`).map(x=>x.value)}
+let collections=[],activeFolder=null,editingFolder=null,videoEditing=null,deletedVideo=null,allVideos=[];
+function collectionOptions(value){return '<option value="">Unfiled</option>'+collections.map(f=>`<option value="${f.id}" ${value===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}
 async function library(){
- const list=await api('/projects');$('#project-count').textContent=list.length;$('#library-count').textContent=`${list.length} ${list.length===1?'project':'projects'}`;
+ const [list,folders]=await Promise.all([api('/projects'),api('/folders')]);collections=folders;allVideos=list;
+ if(activeFolder&&!collections.some(f=>f.id===activeFolder))activeFolder=null;
+ const f=collections.find(f=>f.id===activeFolder),visible=activeFolder?list.filter(p=>p.folder_id===activeFolder):list;
+ $('#project-count').textContent=list.length;$('#library-count').textContent=`${visible.length} video${visible.length===1?'':'s'}`;
+ $('#folder-heading').textContent=f?.name||'Your videos';$('#folder-settings').hidden=!f;$('#channel-browse').hidden=!f?.channel_url;
+ $('#folder-note').textContent=f?(f.instructions?'Folder instructions are ready for your next AI generation.':'Add folder instructions to give every video a shared direction.'):'Create a folder to keep a channel or series together.';
+ $('#folder-list').innerHTML=collections.map(f=>`<button class="project-link ${f.id===activeFolder?'active':''}" data-folder="${f.id}"><span>▱</span><span>${esc(f.name)} · ${list.filter(p=>p.folder_id===f.id).length}</span></button>`).join('');
+ $$('[data-folder]').forEach(b=>b.onclick=safe(async()=>{activeFolder=b.dataset.folder;$('#channel-library').hidden=true;showView('welcome');await library()}));
  $('#projects').innerHTML=list.slice(0,10).map(p=>`<button class="project-link" data-project="${p.id}"><span>▧</span><span>${esc(p.title)}</span></button>`).join('');
- $('#library').innerHTML=list.length?list.map(p=>`<button class="library-card" data-project="${p.id}">${p.state==='ready'?`<img src="${mediaUrl(p.id,'poster.jpg')}" alt="Video thumbnail">`:'<div class="empty">Preparing video…</div>'}<div><b>${esc(p.title)}</b><small>${p.meta?clock(p.meta.duration)+' · ':''}${p.clips.length} clips · ${new Date(p.created*1000).toLocaleDateString()}</small></div></button>`).join(''):'<div class="empty"><div class="symbol">▧</div>Your next great clip starts here.<br>Import a video to create your first project.</div>';
- $$('[data-project]').forEach(b=>b.onclick=safe(()=>loadProject(b.dataset.project)));
+ $('#library').innerHTML=visible.length?visible.map(p=>`<article class="library-entry"><button class="library-card" data-project="${p.id}">${p.state==='ready'?`<img src="${mediaUrl(p.id,'poster.jpg')}" alt="Video thumbnail">`:'<div class="empty">Import not ready</div>'}<div><b>${esc(p.title)}</b><small>${p.meta?clock(p.meta.duration)+' · ':''}${p.clips.length} clips · ${new Date(p.created*1000).toLocaleDateString()}</small></div></button><button class="text-button" data-organize="${p.id}">Rename · Move · Delete</button></article>`).join(''):'<div class="empty"><div class="symbol">▧</div>Your next great clip starts here.<br>Upload or import a video into this folder.</div>';
+ $$('[data-project]').forEach(b=>b.onclick=safe(()=>loadProject(b.dataset.project)));$$('[data-organize]').forEach(b=>b.onclick=()=>organizeVideo(b.dataset.organize));
 }
+function folderDialog(id){editingFolder=id||null;const f=collections.find(f=>f.id===id);$('#folder-name').value=f?.name||'';$('#folder-instructions').value=f?.instructions||'';$('#folder-channel').value=f?.channel_url||'';$('#folder-delete').hidden=!id;$('#folder-dialog').showModal()}
+$('#folder-new').onclick=()=>folderDialog();$('#folder-settings').onclick=()=>folderDialog(activeFolder);
+$('#folder-save').onclick=safe(async()=>{const name=$('#folder-name').value.trim();if(!name)throw Error('Give your folder a name.');const f=await api('/folders'+(editingFolder?'/'+editingFolder:''),{name,instructions:$('#folder-instructions').value,channel_url:$('#folder-channel').value.trim()},editingFolder?'PUT':'POST');activeFolder=f.id;$('#folder-dialog').close();showView('welcome');await library();toast('Folder ready. Give your ideas a home.');});
+$('#folder-delete').onclick=safe(async()=>{if(!editingFolder||!confirm('Delete this folder? Its videos will remain in your library, unfiled.'))return;await api('/folders/'+editingFolder,{},'DELETE');activeFolder=null;$('#folder-dialog').close();await library()});
+function organizeVideo(id){const p=allVideos.find(p=>p.id===id)||project;if(!p)return;videoEditing=p.id;$('#video-name').value=p.title;$('#video-folder').innerHTML=collectionOptions(p.folder_id);$('#video-dialog').showModal()}
+$('#video-settings').onclick=()=>organizeVideo(project.id);
+$('#video-save').onclick=safe(async()=>{const title=$('#video-name').value.trim();if(!title)throw Error('Give your video a name.');await api('/projects/'+videoEditing,{title,folder_id:$('#video-folder').value||null},'PUT');$('#video-dialog').close();await library();if(project?.id===videoEditing)await loadProject(videoEditing);toast('Video updated.')});
+$('#video-delete').onclick=safe(async()=>{if(!confirm('Move this video and its local clips to trash? Scheduled social posts will remain.'))return;const result=await api('/projects/'+videoEditing,{},'DELETE');deletedVideo=result.restore_id;picked.clear();if(project?.id===videoEditing){project=null;$('#player').pause();$('#player').removeAttribute('src')}$('#video-dialog').close();showView('welcome');$('#undo-delete').hidden=false;await library()});
+$('#video-undo').onclick=safe(async()=>{if(!deletedVideo)return;await api('/trash/'+deletedVideo+'/restore',{});deletedVideo=null;$('#undo-delete').hidden=true;await library();toast('Video restored.')});
+$('#channel-browse').onclick=safe(async()=>{const fid=activeFolder;$('#channel-browse').disabled=true;try{const videos=await api('/folders/'+fid+'/channel-videos');if(fid!==activeFolder)return;$('#channel-library').hidden=false;$('#channel-library').innerHTML='<h3>Recent channel videos</h3>'+videos.map(v=>{const existing=allVideos.find(p=>p.source===v.url);return `<article class="channel-card"><b>${esc(v.title)}</b><button class="${existing?'secondary':'primary'}" ${existing?`data-project="${existing.id}"`:`data-channel-url="${esc(v.url)}"`}>${existing?'✓ In your library — open':'Import into folder'}</button></article>`}).join('');$$('#channel-library [data-project]').forEach(b=>b.onclick=safe(()=>loadProject(b.dataset.project)));$$('[data-channel-url]').forEach(b=>b.onclick=safe(async()=>{b.disabled=true;try{await imported(await api('/import/url',{url:b.dataset.channelUrl,folder_id:fid}))}finally{b.disabled=false}}));}finally{$('#channel-browse').disabled=false}});
 async function loadProject(id){
  project=await api('/projects/'+id);selected=null;showView('project');$('#crumb').textContent='Video project';$('#project-title').textContent=project.title;$('#project-meta').textContent=project.meta?`${clock(project.meta.duration)} source · ${project.meta.width} × ${project.meta.height} · Saved locally`:'Preparing your video…';
  $('#source-label').textContent=project.source?'IMPORTED FROM A VIDEO LINK':'UPLOADED VIDEO';$('#download-source').href=asset('source.mp4',true);$('#download-source').hidden=project.state!=='ready';$('#generator').hidden=false;$('#editor').hidden=true;
@@ -113,8 +132,8 @@ $('#speech-wrap').onpointermove=e=>{if(rangeDrag==null)return;rangeSel={start:ra
 $('#speech-wrap').onpointerup=e=>{if(rangeDrag==null)return;const end=timeAt($('#speech-wrap'),e.clientX);const a=Math.min(rangeDrag,end),b=Math.max(rangeDrag,end);rangeDrag=null;if(b-a<1){rangeSel=null;drawRange();return}rangeSel={start:a,end:b};if(!showingExport)$('#player').currentTime=a;drawRange()};
 $('#speech-wrap').ondblclick=()=>{rangeSel=null;drawRange()};
 async function imported(result){await library();await loadProject(result.project.id);track(result.job)}
-$('#import-form').onsubmit=safe(async e=>{e.preventDefault();$('#import-button').disabled=true;try{await imported(await api('/import/url',{url:$('#source-url').value.trim()}))}finally{$('#import-button').disabled=false}});
-async function upload(file){if(!file)return;if(file.size>8*1024**3)throw Error('Maximum upload size is 8 GB.');const form=new FormData();form.append('file',file);toast('Uploading video to your local service…');await imported(await api('/import/upload',form));$('#file').value=''}
+$('#import-form').onsubmit=safe(async e=>{e.preventDefault();$('#import-button').disabled=true;try{await imported(await api('/import/url',{url:$('#source-url').value.trim(),folder_id:activeFolder}))}finally{$('#import-button').disabled=false}});
+async function upload(file){if(!file)return;if(file.size>8*1024**3)throw Error('Maximum upload size is 8 GB.');const form=new FormData();form.append('file',file);if(activeFolder)form.append('folder_id',activeFolder);toast('Uploading video to your local service…');await imported(await api('/import/upload',form));$('#file').value=''}
 $('#file').onchange=safe(e=>upload(e.target.files[0]));$('#dropzone').ondragover=e=>{e.preventDefault();$('#dropzone').classList.add('drag')};$('#dropzone').ondragleave=()=>$('#dropzone').classList.remove('drag');$('#dropzone').ondrop=safe(e=>{e.preventDefault();$('#dropzone').classList.remove('drag');return upload(e.dataTransfer.files[0])});
 $('#count-minus').onclick=()=>$('#count').textContent=count=Math.max(1,count-1);$('#count-plus').onclick=()=>$('#count').textContent=count=Math.min(12,count+1);
 $('#transcription').onchange=()=>$('#local-model-label').hidden=$('#transcription').value!=='local';
@@ -128,7 +147,7 @@ function updateJob(j){$('#job-message').textContent=j.message;$('#job-progress')
 $('#cancel-job').onclick=safe(async()=>{if(currentJob)await api('/jobs/'+currentJob.id+'/cancel',{});toast('Cancelling current operation…')});
 async function poll(){if(polling)return;polling=true;try{const jobs=await api('/jobs');const active=jobs.find(j=>j.project===project?.id&&['queued','running'].includes(j.state))||jobs.find(j=>['queued','running'].includes(j.state));if(active)track(active);else if(currentJob){const ended=jobs.find(j=>j.id===currentJob.id);if(ended&&!seenJobs.has(ended.id)){seenJobs.add(ended.id);$('#job-dock').hidden=true;currentJob=null;if(ended.state==='error')toast(ended.message,true);else if(ended.state==='cancelled')toast('Operation cancelled. Completed work is saved.');else toast('Ready. Your project has been saved.');if(project?.id===ended.project){const id=selected?.id;await loadProject(project.id);if(id&&project.clips.some(c=>c.id===id))editClip(id)}await library();await renderSaved().catch(()=>{})}}const busy=project?.state!=='ready'||!!jobs.find(j=>j.project===project?.id&&['queued','running'].includes(j.state));$('#generate').disabled=busy;if($('#more-clips'))$('#more-clips').disabled=busy;$('#connection').textContent='Automatic engine connected';$('#connection').classList.remove('offline')}catch{$('#connection').textContent='Restarting private engine…';$('#connection').classList.add('offline');startEngine().catch(()=>{$('#connection').textContent='Engine unavailable · run installer'})}finally{polling=false}}
 function home(){project=null;selected=null;showView('welcome');$('#crumb').textContent='Video library';$('#player').pause();history.replaceState(null,'',location.pathname);library().catch(e=>toast(e.message,true))}
-$('#home').onclick=home;$('#new').onclick=()=>{home();$('#source-url').focus()};
+$('#home').onclick=()=>{activeFolder=null;$('#channel-library').hidden=true;home()};$('#new').onclick=()=>{home();$('#source-url').focus()};
 $('#calendar-nav').onclick=safe(async()=>{await health();showView('calendar')});
 $('#saved-nav').onclick=safe(()=>showView('saved'));
 async function renderSaved(){
@@ -203,15 +222,64 @@ async function renderCalendar(){
  $$('.cal-post').forEach(b=>{b.ondragstart=e=>{e.dataTransfer.setData('text/plain',JSON.stringify({id:b.dataset.post,ids:(b.dataset.ids||'').split(',').filter(Boolean),when:b.dataset.when}))};b.onclick=safe(()=>openPostDetail(b.dataset.post,(b.dataset.ids||'').split(',').filter(Boolean)))});
  $$('[data-drop]').forEach(cell=>{cell.ondragover=e=>{e.preventDefault();cell.classList.add('drop')};cell.ondragleave=()=>cell.classList.remove('drop');cell.ondrop=safe(async e=>{e.preventDefault();cell.classList.remove('drop');const payload=JSON.parse(e.dataTransfer.getData('text/plain')||'{}');const ids=payload.ids?.length?payload.ids:[payload.id].filter(Boolean);if(!ids.length)return;const old=new Date(payload.when);const dest=new Date(cell.dataset.drop);dest.setHours(old.getHours(),old.getMinutes(),0,0);for(const id of ids)await api(`/ghl/posts/${id}`,{schedule_date:dest.toISOString()},'PUT');toast(ids.length>1?`Moved ${ids.length} platform posts.`:'Post moved.');await renderCalendar()})});
 }
+let quickDrafts=[],quickIndex=0,quickProject='',quickSending=false;
+function quickTimes(){
+ const start=new Date($('#quick-start').value),hours=Number($('#quick-interval').value);
+ return quickDrafts.map((_,i)=>new Date(+start+i*hours*3600000));
+}
+function quickProgress(){
+ const ready=quickDrafts.filter(d=>d.reviewed).length;
+ $('#quick-count').textContent=`${ready} of ${quickDrafts.length} posts ready · Build your next winning week.`;
+ $('#quick-progress').value=ready;$('#quick-progress').max=quickDrafts.length||1;
+ $('#quick-save').disabled=quickSending||ready!==quickDrafts.length||!ready;
+ $('#quick-save').textContent=quickSending?'Sending your lineup…':`Schedule ${quickDrafts.length} reviewed posts ↗`;
+ const times=quickTimes();
+ $('#quick-lineup').innerHTML=quickDrafts.map((d,i)=>`<button type="button" class="quick-step ${i===quickIndex?'active':''}" data-step="${i}" aria-current="${i===quickIndex?'step':'false'}">${d.reviewed?'✓':i+1} · ${esc(d.clip.title)}<small>${Number.isNaN(+times[i])?'Choose a start time':times[i].toLocaleString()}</small></button>`).join('');
+ $$('[data-step]').forEach(b=>b.onclick=()=>{quickIndex=Number(b.dataset.step);renderQuick()});
+}
+function quickOptions(target,items,field){
+ const draft=quickDrafts[quickIndex];
+ $(target).innerHTML=(items||[]).map((p,i)=>`<button type="button" class="copy-opt ${draft[field]===p.text?'on':''}" data-option="${i}"><b>${esc(p.label||'Option')}</b><span>${esc(p.text)}</span></button>`).join('');
+ $$(`${target} [data-option]`).forEach(b=>b.onclick=()=>{draft[field]=items[Number(b.dataset.option)].text;draft.reviewed=false;renderQuick()});
+}
+function renderQuick(){
+ const d=quickDrafts[quickIndex];if(!d)return;
+ $('#quick-edit-title').textContent=`${quickIndex+1}. ${d.clip.title}`;
+ $('#quick-poster').src=mediaUrl(quickProject,'exports/'+d.clip.export.id+'/poster.jpg');
+ $('#quick-summary').value=d.summary;$('#quick-comment').value=d.follow_up;
+ $('#quick-back').disabled=quickIndex===0;
+ $('#quick-review').textContent=quickIndex===quickDrafts.length-1?'✓ This post is ready':'✓ Looks good — next clip';
+ $('#quick-options-status').textContent=d.loading?'Writing fresh options…':d.error||'Pick a favorite, or edit the text below. No comment? Leave it blank.';
+ $('#quick-rewrite').disabled=!!d.loading;
+ quickOptions('#quick-post-picks',d.social?.posts,'summary');quickOptions('#quick-comment-picks',d.social?.comments,'follow_up');quickProgress();
+}
+async function quickRewrite(){
+ const d=quickDrafts[quickIndex],pid=quickProject;if(!d||d.loading)return;
+ d.loading=true;d.error='';renderQuick();
+ try{d.social=await api(`/projects/${pid}/clips/${d.clip.id}/copy`,{});d.reviewed=false}
+ catch(e){d.error=e.message}
+ finally{d.loading=false;if(quickDrafts.includes(d))renderQuick()}
+}
 async function openQuick(){
  if(!project)throw Error('Open a project and select rendered clips first.');
  const ids=[...picked].filter(id=>project.clips.some(c=>c.id===id&&c.export&&!c.dirty));
  if(!ids.length)throw Error('Check the clips you want, then click Quick schedule. Render them first if needed.');
- if(!ghlInfo.connected){$('#settings').showModal();throw Error('Save your GoHighLevel location and token in Settings first.')}
- $('#quick-count').textContent=`${ids.length} clip${ids.length===1?'':'s'} will be spaced from the start time. Captions fill in from each title and transcript.`;
- const start=new Date();start.setMinutes(0,0,0);start.setHours(start.getHours()+1);$('#quick-start').value=localStamp(start);
- await loadAccounts();await loadUsers();accountBoxes('#quick-accounts');$('#quick-dialog').showModal();
+ if(ids.length>20)throw Error('Pick up to 20 clips for one lineup.');
+ if(!ghlInfo.connected){$('#settings').showModal();throw Error('Connect your social workspace in Settings first.')}
+ if(quickProject!==project.id||ids.join()!==quickDrafts.map(d=>d.clip.id).join()){
+  quickProject=project.id;quickIndex=0;quickDrafts=ids.map(id=>{const c=project.clips.find(c=>c.id===id);return {clip:c,social:c.social,summary:c.social?.posts?.[0]?.text||clipCaption(c),follow_up:c.social?.comments?.[0]?.text||'',reviewed:false}});
+  const start=new Date();start.setMinutes(0,0,0);start.setHours(start.getHours()+1);$('#quick-start').value=localStamp(start);
+ }
+ await loadAccounts();await loadUsers();accountBoxes('#quick-accounts');renderQuick();$('#quick-dialog').showModal();
+ if(!quickDrafts[quickIndex].social)await quickRewrite();
 }
+$('#quick-back').onclick=()=>{quickIndex=Math.max(0,quickIndex-1);renderQuick()};
+$('#quick-review').onclick=safe(async()=>{const d=quickDrafts[quickIndex];if(!d.summary.trim())throw Error('Give this post a title or caption first.');d.reviewed=true;if(quickIndex<quickDrafts.length-1)quickIndex++;renderQuick();if(!quickDrafts[quickIndex].social)await quickRewrite()});
+$('#quick-rewrite').onclick=safe(quickRewrite);
+$('#quick-summary').oninput=()=>{const d=quickDrafts[quickIndex];d.summary=$('#quick-summary').value;d.reviewed=false;quickProgress()};
+$('#quick-comment').oninput=()=>{const d=quickDrafts[quickIndex];d.follow_up=$('#quick-comment').value;d.reviewed=false;quickProgress()};
+$('#quick-no-comment').onclick=()=>{const d=quickDrafts[quickIndex];d.follow_up='';d.reviewed=false;renderQuick()};
+$('#quick-start').onchange=quickProgress;$('#quick-interval').onchange=quickProgress;
 $('#cal-prev').onclick=safe(async()=>{calCursor=new Date(calCursor.getFullYear(),calCursor.getMonth()-1,1);await renderCalendar()});
 $('#cal-next').onclick=safe(async()=>{calCursor=new Date(calCursor.getFullYear(),calCursor.getMonth()+1,1);await renderCalendar()});
 $('#mini-prev').onclick=()=>{miniCursor=new Date(miniCursor.getFullYear(),miniCursor.getMonth()-1,1);renderMiniCal()};
@@ -244,7 +312,18 @@ $('#post-now').onclick=safe(()=>submitSchedule('scheduled',true));
 $('#post-detail-save').onclick=safe(async()=>{if(!activePost)return;const when=new Date($('#post-detail-when').value);if(Number.isNaN(+when))throw Error('Pick a valid date and time.');await api(`/ghl/posts/${activePost._id||activePost.id}`,{schedule_date:when.toISOString()},'PUT');$('#post-dialog').close();toast('Post updated.');await renderCalendar()});
 $('#post-detail-delete').onclick=safe(async()=>{if(!activePost||!confirm('Delete this scheduled post?'))return;await api(`/ghl/posts/${activePost._id||activePost.id}`,{},'DELETE');$('#post-dialog').close();toast('Post deleted.');await renderCalendar()});
 $('#quick-from-clips').onclick=safe(openQuick);$('#quick-schedule-open').onclick=safe(openQuick);
-$('#quick-save').onclick=safe(async()=>{const account_ids=checkedAccounts('#quick-accounts');if(!account_ids.length)throw Error('Choose at least one social account.');const user_id=$('#quick-user').value;if(!user_id)throw Error('Pick who is posting.');const clip_ids=[...picked].filter(id=>project.clips.some(c=>c.id===id&&c.export&&!c.dirty));track(await api(`/projects/${project.id}/publish`,{clip_ids,account_ids,user_id,follow_up:$('#quick-follow').value,start:new Date($('#quick-start').value).toISOString(),interval_hours:Number($('#quick-interval').value),type:$('#quick-type').value}));$('#quick-dialog').close();showView('calendar')});
+$('#quick-save').onclick=safe(async()=>{
+ if(quickSending)return;
+ if(!quickDrafts.length||quickDrafts.some(d=>!d.reviewed))throw Error('Review each post first — your lineup is nearly ready.');
+ const account_ids=checkedAccounts('#quick-accounts');if(!account_ids.length)throw Error('Choose at least one social account.');
+ const user_id=$('#quick-user').value;if(!user_id)throw Error('Pick who is posting.');
+ const times=quickTimes();if(Number.isNaN(+times[0])||+times[0]<=Date.now())throw Error('Choose a future start time.');
+ quickSending=true;quickProgress();
+ try{
+  track(await api(`/projects/${quickProject}/publish`,{clip_ids:quickDrafts.map(d=>d.clip.id),posts:quickDrafts.map(d=>({clip_id:d.clip.id,summary:d.summary,follow_up:d.follow_up})),account_ids,user_id,start:times[0].toISOString(),interval_hours:Number($('#quick-interval').value),type:$('#quick-type').value}));
+  $('#quick-dialog').close();toast('Lineup submitted! Watch the progress below as your posts are scheduled.');quickDrafts=[];showView('calendar');
+ }finally{quickSending=false;quickProgress()}
+});
 function settingsBody(extra){const body={profile:Object.fromEntries(profileNames.map(name=>[name,$('#profile-'+name).value.trim()])),model:$('#ai-model').value,stt_model:$('#stt-model').value,ghl_location:$('#ghl-location').value.trim(),ghl_user:$('#ghl-user').value,caption_font:$('#set-font').value,caption_color:$('#set-color').value.toUpperCase(),caption_highlight:$('#set-highlight').value.toUpperCase(),caption_style:$('#set-caption-style').value,site_url:$('#set-site').value.trim(),course_url:$('#set-course').value.trim()};if($('#api-key').value)body.key=$('#api-key').value;if($('#ghl-token').value)body.ghl_token=$('#ghl-token').value.trim();return Object.assign(body,extra||{})}
 $('#settings-open').onclick=safe(async()=>{await health();$('#settings').showModal();if(ghlInfo.connected)await loadUsers().catch(()=>{})});
 $('#settings-save').onclick=safe(async()=>{const body=settingsBody();if(!body.ghl_location){body.ghl_token='';body.ghl_accounts=[]}const result=await api('/settings',body);$('#api-key').value='';$('#ghl-token').value='';fillGhl(result.ghl);fillBrand(result.brand,result.links);fillProfile(result.profile);$('#settings').close();if(result.key_set){$('#transcription').value='openrouter';$('#selection').value='openrouter';$('#local-model-label').hidden=true}toast('Settings saved on this computer.')});

@@ -20,7 +20,7 @@ def settings_path(data:Path): return data/'ghl.json'
 def load(data:Path):
     path=settings_path(data)
     if not path.exists(): return dict(token='',location='',user='',accounts=[])
-    try: raw=json.loads(path.read_text())
+    try: raw=json.loads(path.read_text(encoding='utf-8'))
     except Exception: return dict(token='',location='',user='',accounts=[])
     return dict(token=str(raw.get('token') or ''),location=str(raw.get('location') or ''),user=str(raw.get('user') or ''),accounts=list(raw.get('accounts') or []))
 
@@ -31,7 +31,7 @@ def save(data:Path,body:dict):
     if 'accounts' in body and body['accounts'] is not None:
         current['accounts']=[str(x).strip() for x in body['accounts'] if str(x).strip()]
     path=settings_path(data); temp=path.with_suffix('.tmp')
-    temp.write_text(json.dumps(current,indent=2)); temp.replace(path)
+    temp.write_text(json.dumps(current,indent=2), encoding='utf-8'); temp.replace(path)
     return public(current)
 
 def public(cfg):

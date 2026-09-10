@@ -53,3 +53,11 @@ Remove ClipForge in Chrome. Run `Uninstall ClipForge Companion.cmd` on Windows o
 ## Development and verification
 
 The GitHub Actions workflow runs the installer dependencies, native messaging protocol test, creator-profile tests and a real captioned vertical MP4 render on Windows and macOS. It does not automate the Chrome UI or live social publishing. Run `.venv/Scripts/python.exe -m pytest -q` on Windows or `.venv/bin/python -m pytest -q` on Mac after setup.
+
+## Folders and a reviewed scheduling lineup
+
+Use **+** beside **Project folders** to create a folder, give it one AI instruction prompt, and optionally link a YouTube channel. Select a folder before importing or uploading. **Browse channel** lists up to 30 recent videos; choose which to import. Already imported videos are marked. This is an on-demand browser, not automatic channel sync. Folder instructions guide AI clip selection and social copy; local modes remain simpler.
+
+Use **Rename · Move · Delete** below any library video, or **Organize video** in the editor. Deleting a folder unfiles its videos. Deleting a video moves its files into local `data/.trash`; use **Undo delete** immediately to restore it. Scheduled social posts are not deleted.
+
+Select rendered clips and choose **Quick schedule**. Pick a title/caption and first comment for each clip, or write your own. Mark each post ready, review the lineup and times, choose accounts, then schedule the reviewed batch. Your chosen text and blank comments are preserved exactly. The progress dock reports actual submission status.

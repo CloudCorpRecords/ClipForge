@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 from typing import Literal
-from fastapi import FastAPI,HTTPException,UploadFile,File,Request
+from fastapi import FastAPI,HTTPException,UploadFile,File,Request,Form
 from fastapi.responses import FileResponse,JSONResponse,Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field,ConfigDict,model_validator
@@ -47,7 +47,7 @@ def load_ai():
     raw={}
     path=ai_settings_path()
     if path.exists():
-        try: raw=json.loads(path.read_text())
+        try: raw=json.loads(path.read_text(encoding='utf-8'))
         except Exception: raw={}
     if raw.get('key'): ai.KEY=str(raw['key'])
     elif os.environ.get('OPENROUTER_API_KEY') and not ai.KEY: ai.KEY=os.environ.get('OPENROUTER_API_KEY','')
@@ -57,7 +57,7 @@ def load_ai():
     PROFILE.update(raw.get('profile') or {})
 def save_ai():
     path=ai_settings_path(); temp=path.with_suffix('.tmp')
-    temp.write_text(json.dumps(dict(key=ai.KEY,model=ai.MODEL,stt_model=ai.STT,brand=brand_public(),links=links_public(),profile=dict(PROFILE)),indent=2)); temp.replace(path)
+    temp.write_text(json.dumps(dict(key=ai.KEY,model=ai.MODEL,stt_model=ai.STT,brand=brand_public(),links=links_public(),profile=dict(PROFILE)),indent=2), encoding='utf-8'); temp.replace(path)
 load_ai()
 
 @app.middleware('http')
@@ -90,12 +90,13 @@ def folder(pid):
     return p
 
 def read(pid):
-    with LOCK: return json.loads((folder(pid)/'project.json').read_text())
+    with LOCK: return json.loads((folder(pid)/'project.json').read_text(encoding='utf-8'))
 def write(p):
     with LOCK:
-        path=DATA/p['id']/'project.json'; temp=path.with_suffix('.tmp'); temp.write_text(json.dumps(p,ensure_ascii=False,indent=2)); temp.replace(path)
-def create(title):
-    pid=uid(); (DATA/pid).mkdir(); p=dict(id=pid,title=title,created=time.time(),state='importing',clips=[],transcript=None,source=None)
+        path=DATA/p['id']/'project.json'; temp=path.with_suffix('.tmp'); temp.write_text(json.dumps(p,ensure_ascii=False,indent=2), encoding='utf-8'); temp.replace(path)
+def create(title,folder_id=None):
+    if folder_id: get_collection(folder_id)
+    pid=uid(); (DATA/pid).mkdir(); p=dict(id=pid,title=title,created=time.time(),state='importing',clips=[],transcript=None,source=None,folder_id=folder_id)
     write(p); return p
 
 def queue(pid,kind,fn):
@@ -131,7 +132,17 @@ def validate_url(url):
     if any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses): raise ValueError('Local and private-network URLs are not supported. Upload the file instead.')
     return url
 
-class ImportRequest(BaseModel): url:str=Field(max_length=4096)
+class ImportRequest(BaseModel):
+    url:str=Field(max_length=4096)
+    folder_id:str|None=None
+class CollectionEdit(BaseModel):
+    name:str=Field(min_length=1,max_length=120)
+    instructions:str=Field(default='',max_length=6000)
+    channel_url:str=Field(default='',max_length=500)
+class VideoEdit(BaseModel):
+    title:str|None=Field(default=None,min_length=1,max_length=200)
+    folder_id:str|None=None
+
 class CreatorProfile(BaseModel):
     name:str=Field(default='',max_length=120)
     about:str=Field(default='',max_length=2000)
@@ -166,7 +177,13 @@ class GhlPost(BaseModel):
     user_id:str=Field(default='',max_length=80)
 class GhlMove(BaseModel):
     schedule_date:str=Field(max_length=40)
+class QuickCopy(BaseModel):
+    clip_id:str=Field(max_length=80)
+    summary:str=Field(min_length=1,max_length=5000)
+    follow_up:str=Field(default='',max_length=1200)
+
 class GhlQuick(BaseModel):
+    posts:list[QuickCopy]|None=Field(default=None,max_length=20)
     clip_ids:list[str]=Field(min_length=1,max_length=20)
     account_ids:list[str]=Field(min_length=1,max_length=20)
     follow_up:str=Field(default='',max_length=1200)
@@ -174,6 +191,15 @@ class GhlQuick(BaseModel):
     interval_hours:float=Field(default=6,ge=.25,le=168)
     type:Literal['post','story','reel']='reel'
     user_id:str=Field(default='',max_length=80)
+    @model_validator(mode='after')
+    def validate_posts(self):
+        if len(set(self.clip_ids)) != len(self.clip_ids):
+            raise ValueError('Choose each clip only once.')
+        if self.posts is not None:
+            ids=[post.clip_id for post in self.posts]
+            if len(ids)!=len(set(ids)) or set(ids)!=set(self.clip_ids):
+                raise ValueError('Review one post for every selected clip.')
+        return self
 class Analyze(BaseModel):
     transcription:Literal['local','openrouter']='local'
     selection:Literal['local','openrouter']='local'
@@ -272,11 +298,83 @@ def ghl_move(post_id:str,body:GhlMove):
 @app.delete('/api/ghl/posts/{post_id}')
 def ghl_delete(post_id:str):
     return ghl.delete_post(ghl.require(DATA),post_id)
+def collections():
+    path=DATA/'folders.json'
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
+def save_collections(items):
+    path=DATA/'folders.json';temp=path.with_suffix('.tmp')
+    temp.write_text(json.dumps(items,ensure_ascii=False,indent=2), encoding='utf-8');temp.replace(path)
+def get_collection(fid):
+    item=next((f for f in collections() if f['id']==fid),None)
+    if item is None: raise HTTPException(404,'Folder not found')
+    return item
+def project_profile(p):
+    profile=dict(PROFILE)
+    if p.get('folder_id'):
+        f=get_collection(p['folder_id'])
+        profile['folder_instructions']=f.get('instructions','')
+    return profile
+@app.get('/api/folders')
+def list_collections():
+    with LOCK: return collections()
+@app.post('/api/folders')
+def new_collection(body:CollectionEdit):
+    with LOCK:
+        items=collections();item=dict(id=uid(),**body.model_dump());items.append(item);save_collections(items);return item
+@app.put('/api/folders/{fid}')
+def edit_collection(fid:str,body:CollectionEdit):
+    with LOCK:
+        get_collection(fid);items=collections();item=dict(id=fid,**body.model_dump());save_collections([item if f['id']==fid else f for f in items]);return item
+@app.delete('/api/folders/{fid}')
+def delete_collection(fid:str):
+    with LOCK:
+        get_collection(fid)
+        members=[p for p in projects() if p.get('folder_id')==fid]
+        for p in members: ensure_idle(p['id'])
+        for p in members:
+            full=read(p['id']);full['folder_id']=None;write(full)
+        save_collections([f for f in collections() if f['id']!=fid])
+    return dict(ok=True)
+@app.put('/api/projects/{pid}')
+def update_video(pid:str,body:VideoEdit):
+    with LOCK:
+        ensure_idle(pid);p=read(pid)
+        if body.title is not None: p['title']=body.title
+        if 'folder_id' in body.model_fields_set:
+            if body.folder_id: get_collection(body.folder_id)
+            p['folder_id']=body.folder_id
+        write(p);return p
+@app.delete('/api/projects/{pid}')
+def delete_video(pid:str):
+    with LOCK:
+        ensure_idle(pid);source=folder(pid);trash=DATA/'.trash';trash.mkdir(exist_ok=True)
+        source.rename(trash/pid)
+    return dict(ok=True,restore_id=pid)
+@app.post('/api/trash/{pid}/restore')
+def restore_video(pid:str):
+    if not re.fullmatch('[a-f0-9]{16}',pid): raise HTTPException(404)
+    with LOCK:
+        source=DATA/'.trash'/pid
+        if not (source/'project.json').exists(): raise HTTPException(404,'Deleted video not found')
+        if (DATA/pid).exists(): raise HTTPException(409,'Video already exists')
+        source.rename(DATA/pid);p=read(pid)
+        if p.get('folder_id') and not any(f['id']==p['folder_id'] for f in collections()):p['folder_id']=None;write(p)
+    return p
+@app.get('/api/folders/{fid}/channel-videos')
+def channel_videos(fid:str):
+    import sys
+    f=get_collection(fid);url=f.get('channel_url','');parsed=urlparse(url)
+    if parsed.scheme!='https' or parsed.hostname not in {'youtube.com','www.youtube.com'} or not re.match(r'^/(?:@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/videos)?/?$',parsed.path):
+        raise HTTPException(400,'Use a YouTube channel URL, such as https://www.youtube.com/@yourchannel')
+    url='https://www.youtube.com'+parsed.path.rstrip('/').removesuffix('/videos')+'/videos'
+    output=media.run([sys.executable,'-m','yt_dlp','--ignore-config','--flat-playlist','--playlist-end','30','--dump-single-json','--skip-download',url])
+    info=json.loads(output);return [dict(id=e.get('id'),title=e.get('title') or 'Video',url='https://www.youtube.com/watch?v='+e['id']) for e in info.get('entries',[]) if e.get('id') and re.fullmatch(r'[A-Za-z0-9_-]{11}',e['id'])]
+
 @app.get('/api/projects')
 def projects():
     out=[]
     for f in DATA.glob('*/project.json'):
-        p=json.loads(f.read_text()); p.pop('transcript',None); out.append(p)
+        p=json.loads(f.read_text(encoding='utf-8')); p.pop('transcript',None); out.append(p)
     return sorted(out,key=lambda p:p['created'],reverse=True)
 @app.get('/api/projects/{pid}')
 def project(pid:str): return read(pid)
@@ -292,7 +390,7 @@ def cancel(jid:str):
 def import_url(body:ImportRequest):
     try: validate_url(body.url)
     except Exception as e: raise HTTPException(400,str(e))
-    p=create('Importing video…'); p['source']=body.url; write(p)
+    p=create('Importing video…',body.folder_id); p['source']=body.url; write(p)
     def work(progress):
         import sys
         dest=DATA/p['id']; progress('Downloading source video',.05)
@@ -301,16 +399,16 @@ def import_url(body:ImportRequest):
                          '--js-runtimes','node','--ffmpeg-location',media.FFMPEG,'--max-filesize','8G',
                          '--match-filter','duration <= 14400 & !is_live',
                          '-f','bv*[height<=1080]+ba/b[height<=1080]/best','--merge-output-format','mp4',
-                         '--write-info-json','--no-warnings','-o',str(dest/'download.%(ext)s'),'--',body.url])
-        info=json.loads((dest/'download.info.json').read_text()); p['title']=str(info.get('title','Imported video'))[:200]; write(p)
+                         '--write-info-json','--no-warnings','-o',str(dest/'download.%(ext)s'),body.url])
+        info=json.loads((dest/'download.info.json').read_text(encoding='utf-8')); p['title']=str(info.get('title','Imported video'))[:200]; write(p)
         paths=[x for x in dest.glob('download.*') if x.suffix.lower() in ('.mp4','.mkv','.webm','.mov','.avi')]
         if not paths: raise ValueError('No video was downloaded. Upload the original file if the site blocks downloading.')
         finish_import(p,paths[0],progress)
     return dict(project=p,job=queue(p['id'],'import',work))
 
 @app.post('/api/import/upload')
-async def upload(file:UploadFile=File(...)):
-    p=create((file.filename or 'Uploaded video')[:200]); target=DATA/p['id']/'upload.bin'; size=0
+async def upload(file:UploadFile=File(...),folder_id:str|None=Form(default=None)):
+    p=create((file.filename or 'Uploaded video')[:200],folder_id); target=DATA/p['id']/'upload.bin'; size=0
     try:
         with target.open('wb') as f:
             while chunk:=await file.read(1024*1024):
@@ -340,7 +438,9 @@ def analyze(pid:str,body:Analyze):
     def work(progress):
         if not p.get('transcript'):
             p['transcript']=ai.transcribe(DATA/pid/'source.mp4',DATA/pid,p['meta']['duration'],body.transcription,progress,body.local_model); write(p)
-        candidates=ai.suggest(p['transcript'],p['meta']['duration'],body.count,body.length,body.selection,body.brief,progress,window)
+        instructions=project_profile(p).get('folder_instructions','')
+        brief='\n\n'.join(x for x in [instructions,body.brief] if x)
+        candidates=ai.suggest(p['transcript'],p['meta']['duration'],body.count,body.length,body.selection,brief,progress,window)
         fresh=[]
         for x in candidates:
             c=Clip(**{**x,**style}).model_dump(); c.update(id=uid(),score=x['score'],reason=x['reason'],selection=body.selection,dirty=True)
@@ -351,7 +451,7 @@ def analyze(pid:str,body:Analyze):
                 export_one(p,c,lambda m,f:progress(f'Clip {i+1}/{len(fresh)} · {m}',f))
         for i,c in enumerate(fresh):
             progress(f'Writing social posts · {i+1}/{len(fresh)}',.92)
-            c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); write(p)
+            c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,project_profile(p)); write(p)
     return queue(pid,'analyze',work)
 
 @app.post('/api/projects/{pid}/clips')
@@ -391,7 +491,7 @@ def export_clip(pid:str,cid:str):
 def saved_clips():
     items=[]
     for path in DATA.glob('*/project.json'):
-        try: p=json.loads(path.read_text())
+        try: p=json.loads(path.read_text(encoding='utf-8'))
         except Exception: continue
         for c in p.get('clips') or []:
             if not c.get('saved'): continue
@@ -413,14 +513,14 @@ def save_one(pid:str,cid:str):
     return queue(pid,'save',lambda progress:save_clip_media(p,c,progress))
 def clip_social(p,c):
     social=c.get('social')
-    if not social or not social.get('posts') or social.get('_context') != ai.social_context(LINKS,PROFILE):
-        social=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); c['social']=social; write(p)
+    if not social or not social.get('posts') or social.get('_context') != ai.social_context(LINKS,project_profile(p)):
+        social=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,project_profile(p)); c['social']=social; write(p)
     return social
 @app.post('/api/projects/{pid}/clips/{cid}/copy')
 def write_copy(pid:str,cid:str):
     p=require_ready(pid); c=next((x for x in p['clips'] if x['id']==cid),None)
     if c is None: raise HTTPException(404)
-    c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,PROFILE); write(p)
+    c['social']=ai.social_copy(c.get('title'),ghl.caption(p,c),LINKS,project_profile(p)); write(p)
     return c['social']
 @app.get('/api/projects/{pid}/bundle')
 def bundle(pid:str):
@@ -461,12 +561,22 @@ def publish_one(pid:str,cid:str,body:GhlPost):
 @app.post('/api/projects/{pid}/publish')
 def publish_many(pid:str,body:GhlQuick):
     p=require_ready(pid)
-    clips=[c for c in p['clips'] if c['id'] in set(body.clip_ids)]
-    if len(clips)!=len(body.clip_ids): raise HTTPException(400,'One of the selected clips is missing.')
-    def work(progress):
-        for i,c in enumerate(clips):
+    by_id={c['id']:c for c in p['clips']}
+    if any(cid not in by_id for cid in body.clip_ids): raise HTTPException(400,'One of the selected clips is missing.')
+    clips=[by_id[cid] for cid in body.clip_ids]
+    overrides={post.clip_id:post for post in body.posts or []}
+    items=[]
+    for i,c in enumerate(clips):
+        if not c.get('export') or c.get('dirty'): raise HTTPException(400,'Render every selected clip before scheduling.')
+        if c['id'] in overrides:
+            chosen=overrides[c['id']]; summary=chosen.summary; follow_up=chosen.follow_up
+        else:
             social=clip_social(p,c); posts=social.get('posts') or []; comments=social.get('comments') or []
-            item=GhlPost(account_ids=body.account_ids,summary=(posts[i%len(posts)]['text'] if posts else ghl.caption(p,c)),follow_up=body.follow_up or (comments[i%len(comments)]['text'] if comments else ''),schedule_date=ghl.stagger(body.start,i,body.interval_hours),type=body.type,status='scheduled',user_id=body.user_id)
+            summary=posts[i%len(posts)]['text'] if posts else ghl.caption(p,c)
+            follow_up=body.follow_up or (comments[i%len(comments)]['text'] if comments else '')
+        items.append(GhlPost(account_ids=body.account_ids,summary=summary,follow_up=follow_up,schedule_date=ghl.stagger(body.start,i,body.interval_hours),type=body.type,status='scheduled',user_id=body.user_id))
+    def work(progress):
+        for i,(c,item) in enumerate(zip(clips,items)):
             publish_clip(p,c,item,lambda m,f:progress(f'Post {i+1}/{len(clips)} · {m}',(i+f)/len(clips)))
     return queue(pid,'publish',work)
 
