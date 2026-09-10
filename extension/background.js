@@ -7,28 +7,36 @@ let engineReady=false;
 let startPromise=null;
 
 function ensureEngine() {
-  if (engineReady && nativePort) return Promise.resolve({ok:true,alreadyRunning:true});
   if (startPromise) return startPromise;
-  startPromise = new Promise((resolve, reject) => {
-    try {
-      nativePort = chrome.runtime.connectNative('com.clipforge.engine');
-      nativePort.onMessage.addListener(response => {
-        startPromise=null;
-        if (response?.ok) { engineReady=true; resolve(response); }
-        else reject(new Error(response?.error || 'ClipForge engine did not start.'));
-      });
-      nativePort.onDisconnect.addListener(() => {
-        const message=chrome.runtime.lastError?.message || 'ClipForge companion disconnected.';
-        engineReady=false;
-        nativePort=null;
-        if (startPromise) { startPromise=null; reject(new Error(message)); }
-      });
-      nativePort.postMessage({action:'start'});
-    } catch (error) {
-      startPromise=null;
-      reject(error);
+  startPromise = Promise.resolve().then(async () => {
+    if (engineReady && nativePort) {
+      try {
+        const response = await fetch('http://127.0.0.1:43177/api/health', {signal:AbortSignal.timeout(3000)});
+        if (response.ok && (await response.json()).ok) return {ok:true,alreadyRunning:true};
+      } catch {}
+      const stale = nativePort;
+      nativePort = null;
+      engineReady = false;
+      stale.disconnect();
     }
-  });
+    return new Promise((resolve, reject) => {
+      const port = chrome.runtime.connectNative('com.clipforge.engine');
+      nativePort = port;
+      const timer = setTimeout(() => { port.disconnect(); reject(new Error('The editing engine took too long to start. Check data/engine.log.')); }, 35000);
+      port.onMessage.addListener(response => {
+        clearTimeout(timer);
+        if (response?.ok) { engineReady = true; resolve(response); }
+        else { port.disconnect(); reject(new Error(response?.error || 'ClipForge engine did not start.')); }
+      });
+      port.onDisconnect.addListener(() => {
+        clearTimeout(timer);
+        const message = chrome.runtime.lastError?.message || 'ClipForge companion disconnected.';
+        if (nativePort === port) { engineReady = false; nativePort = null; }
+        reject(new Error(message));
+      });
+      port.postMessage({action:'start'});
+    });
+  }).finally(() => { startPromise = null; });
   return startPromise;
 }
 

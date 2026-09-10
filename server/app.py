@@ -114,7 +114,10 @@ def queue(pid,kind,fn):
             with LOCK: JOBS[jid].update(state='done',message='Complete',progress=1)
         except Exception as e:
             with LOCK: JOBS[jid].update(state='cancelled' if isinstance(e,media.Cancelled) else 'error',message=str(e)[-2000:])
-        finally: media.CTX.cancel=None
+        finally:
+            if kind=='import' and JOBS[jid]['state'] in ('error','cancelled'):
+                failed=read(pid);failed['state']='error';failed['error']=JOBS[jid]['message'];write(failed)
+            media.CTX.cancel=None
     POOL.submit(work); return JOBS[jid].copy()
 
 def require_ready(pid):
@@ -579,5 +582,11 @@ def publish_many(pid:str,body:GhlQuick):
         for i,(c,item) in enumerate(zip(clips,items)):
             publish_clip(p,c,item,lambda m,f:progress(f'Post {i+1}/{len(clips)} · {m}',(i+f)/len(clips)))
     return queue(pid,'publish',work)
+
+# An import that survived only on disk was interrupted by an engine restart.
+for pending_file in DATA.glob('*/project.json'):
+    pending=json.loads(pending_file.read_text(encoding='utf-8'))
+    if pending.get('state')=='importing':
+        pending['state']='error';pending['error']='Import was interrupted. Retry the URL, or upload the original video again.';write(pending)
 
 app.mount('/',StaticFiles(directory=ROOT/'extension'/'studio',html=True),name='studio')
