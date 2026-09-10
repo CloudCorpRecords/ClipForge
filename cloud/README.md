@@ -57,7 +57,7 @@ The worker polls pending jobs and saves results even when the browser is closed.
 4. Preview and edit each suggested moment. Choose framing, captions, zoom and pause trimming.
 5. Save & render your edits, or use Export all. Download individual MP4s, a ZIP, the source, or the timestamped JSON.
 
-YouTube may reject downloads from datacenter IP addresses. Uploading the original recording is the fallback; this software does not bypass login, DRM or bot challenges. Videos must be under four hours and 2 GB; render batches contain up to twelve clips of 1–180 seconds each, at 720p or 1080p. CPU transcription offers tiny English, small multilingual, and medium accuracy options. Larger models take longer. Linux may substitute available caption fonts for macOS-only families. Review captions and crop decisions before publishing. No tool guarantees viral reach.
+YouTube may reject downloads from datacenter IP addresses. Uploading the original recording is the fallback; this software does not bypass login, DRM or bot challenges. Videos must be under four hours and 2 GB; render batches contain up to twelve clips of 1–180 seconds each, at 720p or 1080p. Balanced transcription uses the bundled multilingual base model and needs no model download. Fast English and higher accuracy options download additional weights on the worker and can take longer. Linux may substitute available caption fonts for macOS-only families. Review captions and crop decisions before publishing. No tool guarantees viral reach.
 
 ## PHP API example
 

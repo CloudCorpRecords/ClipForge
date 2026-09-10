@@ -50,7 +50,7 @@ function studioApi(string $path,array $body,string $method,string $csrf):mixed {
  studioIdle($p);
  if($action==='analyze'){
   $profile=studioProfile($p);$instructions=trim(json_encode($profile)."\n".($body['brief']??''));$selection=$body['selection']??'local';$transcription=$body['transcription']??'local';if(($selection==='openrouter'||$transcription==='openrouter')&&empty(config()['openrouter_key']))throw new RuntimeException('Add your OpenRouter key in AI & settings.');
-  $input=['task'=>'analyze','video'=>uploadReplicate($dir.'/source.mp4'),'clip_count'=>max(1,min(12,(int)($body['count']??4))),'clip_length'=>max(10,min(90,(int)($body['length']??45))),'local_model'=>$body['local_model']??'small','selection'=>$selection,'transcription'=>$transcription,'instructions'=>$instructions,'options_json'=>json_encode(array_merge(studioOptions(),$body)),'render_clips'=>!empty($body['auto_export'])];
+  $input=['task'=>'analyze','video'=>uploadReplicate($dir.'/source.mp4'),'clip_count'=>max(1,min(12,(int)($body['count']??4))),'clip_length'=>max(10,min(90,(int)($body['length']??45))),'local_model'=>(($body['local_model']??'base')==='small'?'base':($body['local_model']??'base')),'selection'=>$selection,'transcription'=>$transcription,'instructions'=>$instructions,'options_json'=>json_encode(array_merge(studioOptions(),$body)),'render_clips'=>!empty($body['auto_export'])];
   if(is_file($dir.'/transcript.json'))$input['transcript_file']=uploadReplicate($dir.'/transcript.json');
   if(isset($body['window_start'],$body['window_end'])){$input['window_start']=(float)$body['window_start'];$input['window_end']=(float)$body['window_end'];}
   return studioStart($p,$input,'analyze');
