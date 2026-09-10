@@ -45,6 +45,17 @@ def probe(path):
                     has_audio=any(s.type=='audio' for s in c.streams), fps=float(v.average_rate or 30))
 
 def normalize(source, dest):
+    import av
+    with av.open(str(source)) as container:
+        video=next(s for s in container.streams if s.type=='video')
+        audio=next((s for s in container.streams if s.type=='audio'),None)
+        compatible=(video.codec_context.name=='h264' and video.codec_context.pix_fmt=='yuv420p'
+                    and video.width%2==0 and video.height%2==0)
+        audio_compatible=audio is None or audio.codec_context.name=='aac'
+    if compatible:
+        ff('-i',source,'-map','0:v:0','-map','0:a:0?','-c:v','copy',
+           '-c:a','copy' if audio_compatible else 'aac','-movflags','+faststart',dest)
+        return
     ff('-i', source, '-map','0:v:0','-map','0:a:0?', '-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2',
        '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
        '-c:a','aac','-b:a','160k','-movflags','+faststart',dest)

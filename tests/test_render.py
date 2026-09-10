@@ -13,3 +13,14 @@ def test_actual_vertical_export_with_captions_and_jump_cut(tmp_path):
     assert 'Caption' in (folder/'captions.srt').read_text()
     assert 'Dialogue:' in (folder/'captions.ass').read_text()
     media.ff('-v','error','-i',folder/'clip.mp4','-f','null','-')
+
+def test_compatible_h264_import_remuxes_without_reencoding(tmp_path,monkeypatch):
+    source=tmp_path/'source.mp4';dest=tmp_path/'normalized.mp4'
+    media.ff('-f','lavfi','-i','color=size=320x180:rate=24','-t','1','-c:v','libx264','-pix_fmt','yuv420p',source)
+    calls=[];ff=media.ff
+    def record(*args):
+        calls.append(args);return ff(*args)
+    monkeypatch.setattr(media,'ff',record)
+    media.normalize(source,dest)
+    assert calls[0][calls[0].index('-c:v')+1]=='copy'
+    assert media.probe(dest)['duration']==media.probe(source)['duration']

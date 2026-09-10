@@ -401,7 +401,7 @@ def import_url(body:ImportRequest):
         output=media.run([sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--no-cache-dir',
                          '--js-runtimes','node','--ffmpeg-location',media.FFMPEG,'--max-filesize','8G',
                          '--match-filter','duration <= 14400 & !is_live',
-                         '-f','bv*[height<=1080]+ba/b[height<=1080]/best','--merge-output-format','mp4',
+                         '-f','bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]/b[vcodec^=avc1][height<=1080]/bv*[height<=1080]+ba/b[height<=1080]/best','--merge-output-format','mp4',
                          '--write-info-json','--no-warnings','-o',str(dest/'download.%(ext)s'),body.url])
         info=json.loads((dest/'download.info.json').read_text(encoding='utf-8')); p['title']=str(info.get('title','Imported video'))[:200]; write(p)
         paths=[x for x in dest.glob('download.*') if x.suffix.lower() in ('.mp4','.mkv','.webm','.mov','.avi')]
